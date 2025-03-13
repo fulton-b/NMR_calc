@@ -1,0 +1,301 @@
+#!/bin/bash
+
+#!/bin/bash
+
+##### DETECT FILE NAME #####
+
+# Find the first .out file that matches the pattern "variable-OptFreq-conf-*.out"
+out_file=$(find . -name "*-OptFreq-conf-*.out" | head -1)
+
+if [[ -z "$out_file" ]]; then
+  echo "No .out file found in current directory"
+  exit 1
+fi
+
+# Extract the filename from the .out file and remove the "-OptFreq-conf-*.out" pattern
+filename=$(basename "$out_file" "-OptFreq-conf-*.out" | sed 's/-OptFreq-conf-.*//')
+
+
+
+
+# Check for filename/OptFreq/Output in parent directories
+found_input_dir=false
+dir=$(dirname "$(pwd)")
+while [ "$dir" != "/" ]; do
+    if [ -d "$dir/$filename/OptFreq/Output" ]; then
+        found_input_dir=true
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+if ! $found_input_dir; then
+    echo "No matching filename/OptFreq/Output directory found in parent directories"
+    exit 1
+fi
+
+
+##### MENU #####
+
+
+
+
+echo "
+  Choose method:
+
+  1. DP4+ (optimal)
+  2. B3LYP
+  3. m062x
+  4. mPW1PW91
+  0. Quit
+"
+read -p "  Enter selection [0-4]: "
+
+if [[ "$REPLY" =~ ^[0-4]$ ]]; then
+	if [[ "$REPLY" == 0 ]]; then
+		echo ""
+		echo "Program terminated."
+		echo ""
+		exit
+	fi
+	if [[ "$REPLY" == 1 ]]; then
+		method=m062x
+		
+	fi
+
+	if [[ "$REPLY" == 2 ]]; then
+		method=b3lyp
+		
+	fi
+	if [[ "$REPLY" == 3 ]]; then
+		method=m062x
+		
+	fi
+	if [[ "$REPLY" == 4 ]]; then
+		method=mPW1PW91
+		
+	fi
+
+else
+	echo ""
+	echo "Invalid entry." >&2
+	echo ""
+	exit 1
+fi
+
+echo "
+
+  Choose basis set:
+
+  1. DP4+ (optimal)
+  2. 6-31G(d)
+  3. 6-31G(d,p)
+  4. 6-31+G(d,p)
+  5. 6-311G(d)
+  6. 6-311+G(2d,p)
+  7. aug-cc-pVDZ
+  0. Quit
+"
+read -p "  Enter selection [0-7]: "
+
+if [[ "$REPLY" =~ ^[0-7]$ ]]; then
+	if [[ "$REPLY" == 0 ]]; then
+		echo ""
+		echo "Program terminated."
+		echo ""
+		exit
+	fi
+	if [[ "$REPLY" == 1 ]]; then
+		basis=6-31g\(d,p\)	
+	fi
+
+	if [[ "$REPLY" == 2 ]]; then
+		basis=6-31g\(d\)
+	fi
+	if [[ "$REPLY" == 3 ]]; then
+		basis=6-31g\(d,p\)	
+	fi
+	if [[ "$REPLY" == 4 ]]; then
+		basis=6-31+g\(d,p\)
+	fi
+	if [[ "$REPLY" == 5 ]]; then
+		basis=6-311g\(d\)	
+	fi
+	if [[ "$REPLY" == 6 ]]; then
+		basis=6-311+g\(2d,p\)	
+	fi
+	if [[ "$REPLY" == 7 ]]; then
+		basis=aug-cc-pVDZ	
+	fi
+
+
+else
+	echo ""
+	echo "Invalid entry." >&2
+	echo ""
+	exit 1
+fi
+
+ 
+
+
+echo "
+
+  Choose number of processors:
+
+  1. 1
+  2. 2
+  3. 4
+  4. 8
+  5. 12
+  6. 16
+  0. Quit
+"
+read -p "  Enter selection [0-6]: "
+
+if [[ "$REPLY" =~ ^[0-6]$ ]]; then
+	if [[ "$REPLY" == 0 ]]; then
+		echo ""
+		echo "Program terminated."
+		echo ""
+		exit
+	fi
+	if [[ "$REPLY" == 1 ]]; then
+		processors=1	
+	fi
+	if [[ "$REPLY" == 2 ]]; then
+		processors=2	
+	fi
+	if [[ "$REPLY" == 3 ]]; then
+		processors=4	
+	fi
+	if [[ "$REPLY" == 4 ]]; then
+		processors=8	
+	fi
+	if [[ "$REPLY" == 5 ]]; then
+		processors=12	
+	fi
+	if [[ "$REPLY" == 6 ]]; then
+		processors=16	
+	fi
+
+
+
+
+else
+	echo ""
+	echo "Invalid entry." >&2
+	echo ""
+	exit 1
+fi
+
+
+
+
+
+# Detect number of conformers
+conf=$(ls -dq $filename-OptFreq-conf-*.out | wc -l)
+
+
+# Detect number of atoms
+atoms=$(grep 'NAtoms' $filename-OptFreq-conf-*.out | awk '{print $3}' | head -1)
+
+
+# Extract coordinates from .out files => Compile into single text file
+# Might have to change +4 to +5
+for ((i=1;i<=(conf);i++)); do
+	printf -v num "%04d" $i  # Add leading zeros to $i
+	grep -A $((atoms+4)) 'Standard orientation' $filename-OptFreq-conf-$num.out | tail -$atoms >> extracted_conformer_info.txt
+done
+
+
+# Extract atom labels => Save as text file	
+awk '{print $2 }' extracted_conformer_info.txt > atom_numbers.txt
+#Convert atom numbers to atom labels using a cypher
+# H=1, B=5, C=6, N=7, O=8, F=9, Si=14, P=15, S=16, Cl=17, Br=35, I=53
+cat atom_numbers.txt | sed 's/14/Si/g' | sed 's/15/P/g' | sed 's/16/S/g' | sed 's/17/Cl/g' | sed 's/35/Br/g' | sed 's/53/I/g' | tr 156789 HBCNOF > atom_labels.txt
+
+# Extract atom coordinates => Save as text file
+awk '{print $4, $5, $6}' extracted_conformer_info.txt > extracted_coordinates.txt
+
+# Combine atom labels and coordinates into single file
+paste atom_labels.txt extracted_coordinates.txt > atom_labels_and_coordinates.txt
+
+# Create file for each conformer
+split -l $atoms --numeric-suffixes=1 --suffix-length=4 <(cat atom_labels_and_coordinates.txt) conformer-
+
+# Add 2 blank lines at the end of each file
+for i in conformer-*; do
+    printf '\n\n' >> "$i";
+done
+
+
+
+##### GAUSSIAN HEADING #####
+
+# Detect Username
+username=$(whoami)
+
+# Generate Numbers
+for file in conformer-*; do
+  # remove "conformer-" prefix
+  conf_num2=${file#conformer-} 
+    sed -i "1i \\
+%nprocshared=$processors \\
+%mem=4GB \\
+%chk=/home/$username/$filename/Energy/Output/Chk/$filename-Energy-conf-$conf_num2.chk \\
+# $method/$basis\\
+int=ultrafine \\
+\n$filename-Energy-conf-$conf_num2\n\\
+0 1
+" "conformer-$conf_num2"
+
+done
+
+
+# Rename files
+for file in conformer-*; do
+    # remove "conformer-" prefix
+    conf_num2=${file#conformer-} 
+    # rename the file
+    mv "$file" "$filename-Energy-conf-$conf_num2.gjf"
+done
+
+echo -e  "\n========================================================================"
+echo -e "\n  Gaussian Energy job files created."
+
+# Move files to next location
+mv $filename-Energy-conf-*.gjf ../../Energy/Input
+echo -e "  Gaussian Energy job files moved to ../../Energy/Input"
+
+# Remove placeholder files
+rm atom_labels.txt atom_labels_and_coordinates.txt atom_numbers.txt extracted_conformer_info.txt extracted_coordinates.txt
+
+##### EXIT MESSAGES #####
+
+echo -e  "\n========================================================================"
+echo ""
+echo "  Your Energy job files have been created."
+echo "  Method: $method"
+echo "  Basis: $basis"
+echo "  Number of Processors: $processors"
+echo ""
+echo "========================================================================"
+echo ""
+echo "  Continue:"
+echo "  cd ../../Energy/Input"
+echo ""
+echo "  Run Energy jobs:"
+echo "  $ Energy_run"
+echo ""
+
+
+
+
+
+
+
+
+
+
+

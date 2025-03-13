@@ -1,0 +1,79 @@
+#!/bin/bash
+
+##### DETECT FILE NAME #####
+
+# Find the first .out file that matches the pattern "variable-Energy-conf-*.out"
+out_file=$(find . -name "*-Energy-conf-*.out" | head -1)
+
+if [[ -z "$out_file" ]]; then
+  echo "No .out file found in current directory"
+  exit 1
+fi
+
+# Extract the filename from the .out file and remove the "-Energy-conf-*.out" pattern
+filename=$(basename "$out_file" "-Energy-conf-*.out" | sed 's/-Energy-conf-.*//')
+
+
+
+
+# Check for filename/Energy/Input in parent directories
+found_input_dir=false
+dir=$(dirname "$(pwd)")
+while [ "$dir" != "/" ]; do
+    if [ -d "$dir/$filename/Energy/Input" ]; then
+        found_input_dir=true
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+if ! $found_input_dir; then
+    echo "No matching filename/Energy/Input directory found in parent directories"
+    exit 1
+fi
+
+
+
+
+
+##### EXCEL SPREADSHEET CREATION #####
+
+# Count number of conformers
+conf=$(ls -dq $filename-Energy-conf-*.out | wc -l)
+
+# Extract conformer energies
+
+for ((i=1;i<=(conf);i++)); do
+	printf -v num "%04d" $i  # Add leading zeros to $i
+	grep 'SCF Done' $filename-Energy-conf-$num.out | tail -1 | awk '{print $5}' >> $filename-Energy-Conformer_Energies.csv
+done
+
+mv $filename-Energy-Conformer_Energies.csv ../../Data
+
+
+
+
+
+
+
+##### MOVE OUTPUT FILES #####
+
+mv $filename-Energy-conf-*.out ../Output
+
+
+##### EXIT MESSAGE #####
+
+echo -e "\n========================================================================"
+echo -e "\n  Energy .out files moved to ../Output"
+echo "  Excel spreadsheet containing ranked Energy conformer energies created."
+echo -e "  Excel spreadsheet moved to ../../Data"
+
+echo -e "\n========================================================================"
+echo ""
+echo "  Continue:"
+echo "  cd ~/$filename/Data"
+echo ''
+echo "  After all Energy and NMR calculations are complete,"
+echo "  move files to personal computer and continue with Python:"
+echo "  $ python3 Energy_plot"
+echo ""

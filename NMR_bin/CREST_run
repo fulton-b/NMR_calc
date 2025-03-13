@@ -1,0 +1,90 @@
+#!/bin/bash
+
+# Prompt for CREST settings
+read -p "
+  Would you like to use default or custom CREST settings? 
+  1. Default settings
+  2. Custom settings
+
+  Enter 1 or 2: " choice
+
+if [ $choice -eq 1 ]; then
+    # Default settings
+    ewin=6.0
+    ethr=0.05
+    rthr=0.125
+elif [ $choice -eq 2 ]; then
+    # Custom settings
+    echo ""
+    read -p "  Enter Energy Window (in kcal/mol): " ewin
+    read -p "  Enter Energy Threshold (in kcal/mol): " ethr
+    read -p "  Enter Root Threshold (in Angstrom): " rthr
+else
+    echo "Invalid choice. Please enter 1 or 2."
+    exit 1
+fi
+
+# Check for filename in the current directory
+if [ -f *.xyz ]; then
+    # Extract filename from the .xyz file
+    filename=$(basename *.xyz .xyz)
+else
+    echo "No .xyz file found in current directory"
+    exit 1
+fi
+
+# Check for filename/CREST/Input in parent directories
+found_input_dir=false
+dir=$(dirname "$(pwd)")
+while [ "$dir" != "/" ]; do
+    if [ -d "$dir/$filename/CREST/Input" ]; then
+        found_input_dir=true
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+if ! $found_input_dir; then
+    echo "No matching filename/CREST/Input directory found in parent directories"
+    exit 1
+fi
+
+
+echo -e "\n========================================================================"
+echo ""
+echo "  Your job $filename has been submitted."
+echo "  Energy Window: $ewin kcal/mol"
+echo "  Energy Threshold: $ethr kcal/mol"
+echo "  Root Threshold: $rthr Angstrom"
+echo ""
+echo "========================================================================"
+echo ""
+echo "  After the job is finished, organize Output files:"
+echo "  $ CREST_process"
+echo ""
+
+
+
+# Customize this part for job submission on your system
+
+source /usr/local/xtb/xtb-6.3.3/share/xtb/config_env.bash
+
+export OMP_MAX_ACTIVE_LEVELS=1
+export OMP_NUM_THREADS=$1,1
+export OMP_STACKSIZE=4G
+export MKL_NUM_THREADS=$1
+
+
+ulimit -s unlimited
+
+charge=0
+gfn_version=2
+
+task=$filename
+task="${task%.*}"
+
+#sol=water
+#xtb -c $charge -gbsa $sol --gfn $gfn_version --$runtype --molden
+
+
+(/usr/bin/time -f "\n Wall Time = %e seconds (%E)\n Number of CPU = %P" crest $filename.xyz -c $charge --gfn $gfn_version -T $1 -ewin $ewin -ethr $ethr --rthr $rthr >./$task.crest.out) &>>./$task.crest.out &

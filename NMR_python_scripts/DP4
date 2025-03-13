@@ -1,0 +1,229 @@
+import pandas as pd
+import openpyxl
+import shutil
+import os
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import glob
+from sklearn import linear_model, datasets
+
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
+
+
+##### USER INPUT #####
+
+# Print message for user input (filename)
+filename1 = input("\nEnter file name (omit -iso#): \n")
+filename = filename1
+filename2 = filename1
+
+
+
+##### Create DP4+ Spreadsheet #####
+
+
+# Read in the existing file
+original_file = "custom-dp4plus.xlsx"
+
+# Write the contents to a new file with a different name
+new_file = filename2+"-custom-dp4plus.xlsx"
+shutil.copyfile(original_file, new_file)
+
+
+print (f"\nProcessing... Please wait...")
+
+### Detect isomer number
+
+# Define the directory where the files are located
+directory = "."
+
+isomers = set()
+
+# Iterate over the files in the directory
+for filename1 in os.listdir(directory):
+    # Check if the file is a "-iso#" file
+    if "-iso" in filename1:
+        # Extract the iso number from the filename
+        iso_number = int(filename1.split("-iso")[1].split("-")[0])
+        # Check if iso_number is out of range
+        if not 0 < iso_number <= 128:
+            raise ValueError("Iso number is out of range (0 < n <= 128)")
+        # Add the isomer number to the set
+        isomers.add(iso_number)
+
+### Create names for for loop
+# Print the isomer numbers and append -iso{iso_number} to the filename for every iso_number
+for iso_number in isomers:
+    filename = (filename + "-iso" + str(iso_number))
+
+
+
+
+
+
+
+    ##### Proton #####
+
+    # Read the Excel file
+    H_isotropic_unsorted = pd.read_csv(filename+"-Boltzmann_Weighted_H_isotropic.csv")
+
+    # Sort the "Exp. Shift" column in descending order
+    H_isotropic_sorted = H_isotropic_unsorted.sort_values(by=['Exp. Shift'], ascending=False)
+
+    # Write the sorted data back to the Excel file
+    with pd.ExcelWriter(filename+"-Boltzmann_Weighted_H_isotropic-sorted.xlsx") as writer:
+        H_isotropic_sorted.to_excel(writer, sheet_name='Sheet1', index=False)
+
+    ##### Carbon #####
+
+    # Read the Excel file
+    C_isotropic_unsorted = pd.read_csv(filename+"-Boltzmann_Weighted_C_isotropic.csv")
+
+    # Sort the "Exp. Shift" column in descending order
+    C_isotropic_sorted = C_isotropic_unsorted.sort_values(by=['Exp. Shift'], ascending=False)
+
+    # Write the sorted data back to the Excel file
+    with pd.ExcelWriter(filename+"-Boltzmann_Weighted_C_isotropic-sorted.xlsx") as writer:
+        C_isotropic_sorted.to_excel(writer, sheet_name='Sheet1', index=False)
+
+
+
+    ##### Paste data into DP4+ spreadsheet #####
+
+    ### READ PROTON
+
+    # Read the original data from the Boltzmann_Weighted_H_isotropic-sorted.xlsx file
+    H_isotropic_sorted2 = pd.read_excel(filename + '-Boltzmann_Weighted_H_isotropic-sorted.xlsx')
+
+    # Filter out rows where Exp. Shift column is not numeric
+    H_isotropic_sorted2 = H_isotropic_sorted2[pd.to_numeric(H_isotropic_sorted2['Exp. Shift'], errors='coerce').notnull()]
+
+    # Extract values from Exp. Shift column
+    H_exp_shift_values = H_isotropic_sorted2['Exp. Shift'].values
+    H_exp_shift_values = pd.DataFrame(H_exp_shift_values)
+
+
+
+    # Extract values from Boltzmann Weighted H Shift column
+    H_Boltz_Shift = H_isotropic_sorted2['Boltzmann Weighted H Shift'].values
+    H_Boltz_Shift = pd.DataFrame(H_Boltz_Shift)
+
+
+    # Extract values from sp2? column
+    H_sp2 = H_isotropic_sorted2['sp2?'].values
+    H_sp2 = pd.DataFrame(H_sp2)
+
+
+    ### READ CARBON
+
+    # Read the original data from the Boltzmann_Weighted_C_isotropic-sorted.xlsx file
+    C_isotropic_sorted2 = pd.read_excel(filename + '-Boltzmann_Weighted_C_isotropic-sorted.xlsx')
+
+    # Filter out rows where Exp. Shift column is not numeric
+    C_isotropic_sorted2 = C_isotropic_sorted2[pd.to_numeric(C_isotropic_sorted2['Exp. Shift'], errors='coerce').notnull()]
+
+    # Extract the values from the Exp. Shift column
+    C_exp_shift_values = C_isotropic_sorted2['Exp. Shift'].values
+    C_exp_shift_values = pd.DataFrame(C_exp_shift_values)
+
+    # Extract values from Boltzmann Weighted C Shift column
+    C_Boltz_Shift = C_isotropic_sorted2['Boltzmann Weighted C Shift'].values
+    C_Boltz_Shift = pd.DataFrame(C_Boltz_Shift)
+
+    # Extract values from sp2? column
+    C_sp2 = C_isotropic_sorted2['sp2?'].values
+    C_sp2 = pd.DataFrame(C_sp2)
+
+
+
+
+
+
+    ### Paste into DP4+ spreadsheet
+
+    # Load the workbook
+    workbook = openpyxl.load_workbook(filename2 + '-custom-dp4plus.xlsx')
+
+    # Select the Main sheet
+    sheet = workbook['Main']
+
+    if iso_number == 1:
+        ### Paste proton experimental shifts
+        # Set the values starting from cell C14
+        for i, val in enumerate(H_exp_shift_values.values):
+            sheet.cell(row=14+i, column=3, value=val[0])
+            # Add "H" to the corresponding row of column 1
+            sheet.cell(row=14+i, column=1, value="H")
+
+        for i, row in H_sp2.iterrows():
+            sheet.cell(row=14+i, column=2, value=row[0])
+
+
+        for i, val in enumerate(H_Boltz_Shift.values):
+            sheet.cell(row=14+i, column=3+iso_number, value=val[0])
+
+
+        ### Paste carbon experimental shifts
+        # Set the starting row
+        start_row = 14
+
+        # Find the first empty cell in column C
+        while sheet.cell(row=start_row, column=3).value is not None:
+            start_row += 2
+
+        # Paste the values starting from the first empty cell in column C
+        for i, val in enumerate(C_exp_shift_values.values):
+            sheet.cell(row=start_row+i, column=3, value=val[0])
+            # Add "C" to the corresponding row of column 1
+            sheet.cell(row=start_row+i, column=1, value="C")
+
+
+        for i, row in C_sp2.iterrows():
+            sheet.cell(row=start_row+i, column=2, value=row[0])
+
+
+        for i, val in enumerate(C_Boltz_Shift.values):
+            sheet.cell(row=start_row+i, column=3+iso_number, value=val[0])
+
+    else:
+        for i, val in enumerate(H_Boltz_Shift.values):
+            sheet.cell(row=14+i, column=3+iso_number, value=val[0])
+
+
+        ### Paste carbon experimental shifts
+        # Set the starting row
+        start_row = 14
+
+        # Find the first empty cell in column C
+        while sheet.cell(row=start_row, column=3+iso_number).value is not None:
+            start_row += 2
+
+
+
+        for i, val in enumerate(C_Boltz_Shift.values):
+            sheet.cell(row=start_row+i, column=3+iso_number, value=val[0])
+
+
+    filename = filename2
+
+    # Save the changes
+    workbook.save(filename + '-custom-dp4plus.xlsx')
+
+
+
+
+print("\n================================================================================")
+print("")
+print(f"Open {filename}-custom-dp4plus.xlsx with Excel")
+print("and save manually before continuing.")
+print("")
+print(f"Complete analysis with:")
+print(f"python3 NMR_finish")
+print("")
+
+
+

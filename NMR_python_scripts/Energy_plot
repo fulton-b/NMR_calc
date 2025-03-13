@@ -1,0 +1,470 @@
+##### Import modules #####
+
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import os
+import sys
+import glob
+
+# Set the global figure size
+plt.rcParams['figure.figsize'] = (6, 3)  # Adjust the width and height as needed
+
+
+##### USER INPUT #####
+
+# Print message for user input (filename)
+filename1 = input("\nEnter file name (omit -iso#): \n")
+filename = filename1
+filename2 = filename1
+
+
+print("\n================================================================================")
+
+
+
+### Detect isomer number
+
+# Define the directory where the files are located
+directory = "."
+
+isomers = set()
+
+# Iterate over the files in the directory
+for filename1 in os.listdir(directory):
+    # Check if the file is a "-iso#" file
+    if "-iso" in filename1:
+        # Extract the iso number from the filename
+        iso_number = int(filename1.split("-iso")[1].split("-")[0])
+        # Check if iso_number is out of range
+        if not 0 < iso_number <= 128:
+            raise ValueError("Iso number is out of range (0 < n <= 128)")
+        # Add the isomer number to the set
+        isomers.add(iso_number)
+
+### Create names for for loop
+# Print the isomer numbers and append -iso{iso_number} to the filename for every iso_number
+for iso_number in isomers:
+    filename = (filename + "-iso" + str(iso_number))
+
+
+
+    ##### CONFIRM ALL DATA FILES PRESENT #####
+
+    # Define filenames to search for
+    filenames = [f"{filename}-C_isotropic.csv",
+                f"{filename}-CREST-Conformer_Energies.csv",
+                f"{filename}-Energy-Conformer_Energies.csv",
+                f"{filename}-H_isotropic.csv",
+                f"{filename}-OptFreq-Conformer_Energies.csv"]
+
+
+
+    # Check if all files exist
+    missing_files = []
+    for file in filenames:
+        if not glob.glob(file):
+            missing_files.append(file)
+
+    # Print error message for missing files
+    if missing_files:
+        print("Error - the following files do not exist in the current directory:")
+        for file in missing_files:
+            print(file)
+        sys.exit(1)
+
+    ##### Read in CREST conformer energy csv file #####
+
+    CREST_Energies_heading=['Relative Energy (kcal/mol)'] 
+    CREST_Energies = pd.read_csv(filename+"-CREST-Conformer_Energies.csv", names=CREST_Energies_heading, header=None)
+
+
+
+    ##### Plot CREST conformer energies #####
+
+    CREST_Energies_barplot = CREST_Energies.plot.bar(y=['Relative Energy (kcal/mol)'], legend=False, color='#8F92A7', width=0.8)
+    CREST_Energies_barplot.set_xlabel("Conformer #", fontsize=10, color='black')
+    CREST_Energies_barplot.set_ylabel("Relative Energy (kcal/mol)", fontsize=10, color='black')
+    CREST_Energies_barplot.locator_params(axis='x', nbins=8)
+    CREST_Energies_barplot.set_facecolor('ghostwhite')
+    CREST_Energies_barplot.set_title("CREST Conformer Energies", fontweight="bold", color='#262626')
+
+    # Remove top and right borders
+    CREST_Energies_barplot.spines['top'].set_visible(False)
+    CREST_Energies_barplot.spines['right'].set_visible(False)
+
+    # Change tick and axes color
+    CREST_Energies_barplot.tick_params(axis='both', colors='#262626')  # Change tick labels color to red
+    CREST_Energies_barplot.spines['left'].set_color('dimgrey')         # Change left spine color to blue
+    CREST_Energies_barplot.spines['bottom'].set_color('dimgrey')     # Change bottom spine color to green
+
+
+    # Tick addition - Changes depending on # of data points)
+
+    # Determine the number of data points
+    num_points = len(CREST_Energies)
+    # Set the number of ticks and the tick interval based on the number of data points
+    if num_points < 100:
+        num_ticks = num_points // 5 + 1
+        tick_interval = 5
+    elif num_points < 300:
+        num_ticks = num_points // 10 + 1
+        tick_interval = 10
+    elif num_points < 1000:
+        num_ticks = num_points // 50 + 1
+        tick_interval = 50
+    else:
+        num_ticks = num_points // 100 + 1
+        tick_interval = 100
+
+    if tick_interval == 5:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    elif tick_interval == 10:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    elif tick_interval == 50:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    else:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+
+
+    # Set the x-ticks and labels
+    xticks = [i-1 for i in tick_labels]
+    xtick_labels = [str(i) for i in tick_labels]
+    CREST_Energies_barplot.set_xticks(xticks)
+    CREST_Energies_barplot.set_xticklabels(xtick_labels)
+
+
+    # Save to .png
+    CREST_Energies_barplot.figure.savefig(filename+'-CREST-Conformer_Energies.png', bbox_inches="tight")
+    print (f"\nCREST conformer energy barplot created for isomer {iso_number}.")
+
+
+
+
+    ##### Read in OptFreq conformer energy csv file #####
+
+    OptFreq_Energies_heading=['Conformer Energy (Hartrees)'] 
+    OptFreq_Energies = pd.read_csv(filename+"-OptFreq-Conformer_Energies.csv", names=OptFreq_Energies_heading, header=None)
+    OptFreq_Energies.index = OptFreq_Energies.index
+
+    OptFreq_Energies = OptFreq_Energies['Conformer Energy (Hartrees)']
+
+
+    ##### BOLTZMANN POPULATION CALCULATION #####
+
+    # Find OptFreq minimum energy
+    OptFreq_Energy_min = OptFreq_Energies.min(axis=0)
+
+    # Constants for Boltzmann population calculation
+    R = 0.0083145
+    T = 298.15
+
+    # Boltzmann population calculation
+
+    for i in range (len(OptFreq_Energies)):
+            OptFreq_Energies[i] = OptFreq_Energies[i] - OptFreq_Energy_min
+            OptFreq_Energies[i] = OptFreq_Energies[i] * 2625.5
+            OptFreq_Energies[i] = -OptFreq_Energies[i] / (R * T)
+            OptFreq_Energies[i] = np.exp(OptFreq_Energies[i])
+
+    OptFreq_Energy_sum = sum(OptFreq_Energies)
+
+    for i in range (len(OptFreq_Energies)):
+            OptFreq_Energies[i] = OptFreq_Energies[i] / OptFreq_Energy_sum
+            OptFreq_Energies[i] = OptFreq_Energies[i] * 100
+            
+    OptFreq_BoltzPop = pd.DataFrame(OptFreq_Energies)
+    OptFreq_BoltzPop = OptFreq_BoltzPop.rename(columns={"Conformer Energy (Hartrees)": "Boltzmann Population (%)"})
+    OptFreq_BoltzPop.index = OptFreq_BoltzPop.index + 1
+
+
+
+
+    ##### PLOT OPTFREQ CONFORMER ENERGIES #####
+
+    OptFreq_BoltzPop_barplot = OptFreq_BoltzPop.plot.bar(y=['Boltzmann Population (%)'], legend=False, color='#7DBFB4')
+    OptFreq_BoltzPop_barplot.set_xlabel("Conformer #", fontsize=10, color='black')
+    OptFreq_BoltzPop_barplot.set_ylabel("Boltzmann Population (%)", fontsize=10, color='black')
+    OptFreq_BoltzPop_barplot.locator_params(axis='x', nbins=8)
+    OptFreq_BoltzPop_barplot.set_facecolor('ghostwhite')
+    OptFreq_BoltzPop_barplot.set_title("OptFreq Conformer Populations", fontweight="bold", color='#262626')
+
+    # Remove top and right borders
+    OptFreq_BoltzPop_barplot.spines['top'].set_visible(False)
+    OptFreq_BoltzPop_barplot.spines['right'].set_visible(False)
+
+    # Change tick and axes color
+    OptFreq_BoltzPop_barplot.tick_params(axis='both', colors='#262626')  # Change tick labels color to red
+    OptFreq_BoltzPop_barplot.spines['left'].set_color('dimgrey')         # Change left spine color to blue
+    OptFreq_BoltzPop_barplot.spines['bottom'].set_color('dimgrey')     # Change bottom spine color to green
+
+
+    # Tick addition - Changes depending on # of data points)
+
+    # Determine the number of data points
+    num_points = len(OptFreq_Energies)
+    # Set the number of ticks and the tick interval based on the number of data points
+    if num_points < 100:
+        num_ticks = num_points // 5 + 1
+        tick_interval = 5
+    elif num_points < 300:
+        num_ticks = num_points // 10 + 1
+        tick_interval = 10
+    elif num_points < 1000:
+        num_ticks = num_points // 50 + 1
+        tick_interval = 50
+    else:
+        num_ticks = num_points // 100 + 1
+        tick_interval = 100
+
+    if tick_interval == 5:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    elif tick_interval == 10:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    elif tick_interval == 50:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    else:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+
+
+    # Set the x-ticks and labels
+    xticks = [i-1 for i in tick_labels]
+    xtick_labels = [str(i) for i in tick_labels]
+    OptFreq_BoltzPop_barplot.set_xticks(xticks)
+    OptFreq_BoltzPop_barplot.set_xticklabels(xtick_labels)
+
+    # Save to .png
+    OptFreq_BoltzPop_barplot.figure.savefig(filename+'-OptFreq-Conformer_Boltzmann_Populations.png', bbox_inches="tight")
+    print (f"OptFreq conformer Boltzmann populations barplot created for isomer {iso_number}.")
+
+
+
+
+
+
+
+    ##### Read in Single Point Energy conformer energy csv file #####
+
+    SinglePoint_Energies_heading=['Conformer Energy (Hartrees)'] 
+    SinglePoint_Energies = pd.read_csv(filename+"-Energy-Conformer_Energies.csv", names=SinglePoint_Energies_heading, header=None)
+    SinglePoint_Energies.index = SinglePoint_Energies.index
+
+    SinglePoint_Energies = SinglePoint_Energies['Conformer Energy (Hartrees)']
+
+
+    ##### BOLTZMANN POPULATION CALCULATION #####
+
+    # Find SinglePoint minimum energy
+    SinglePoint_Energy_min = SinglePoint_Energies.min(axis=0)
+
+    # Constants for Boltzmann population calculation
+    R = 0.0083145
+    T = 298.15
+
+    # Boltzmann population calculation
+
+    for i in range (len(SinglePoint_Energies)):
+            SinglePoint_Energies[i] = SinglePoint_Energies[i] - SinglePoint_Energy_min
+            SinglePoint_Energies[i] = SinglePoint_Energies[i] * 2625.5
+            SinglePoint_Energies[i] = -SinglePoint_Energies[i] / (R * T)
+            SinglePoint_Energies[i] = np.exp(SinglePoint_Energies[i])
+
+    SinglePoint_Energy_sum = sum(SinglePoint_Energies)
+
+    for i in range (len(SinglePoint_Energies)):
+            SinglePoint_Energies[i] = SinglePoint_Energies[i] / SinglePoint_Energy_sum
+            SinglePoint_Energies[i] = SinglePoint_Energies[i] * 100
+            
+    SinglePoint_BoltzPop = pd.DataFrame(SinglePoint_Energies)
+    SinglePoint_BoltzPop = SinglePoint_BoltzPop.rename(columns={"Conformer Energy (Hartrees)": "Boltzmann Population (%)"})
+    SinglePoint_BoltzPop.index = SinglePoint_BoltzPop.index + 1
+
+
+
+
+    ##### PLOT SinglePoint CONFORMER ENERGIES #####
+
+    SinglePoint_BoltzPop_barplot = SinglePoint_BoltzPop.plot.bar(y=['Boltzmann Population (%)'], legend=False, color='#7DBFB4')
+    SinglePoint_BoltzPop_barplot.set_xlabel("Conformer #", fontsize=10, color='black')
+    SinglePoint_BoltzPop_barplot.set_ylabel("Boltzmann Population (%)", fontsize=10, color='black')
+    SinglePoint_BoltzPop_barplot.locator_params(axis='x', nbins=8)
+    SinglePoint_BoltzPop_barplot.set_facecolor('ghostwhite')
+    SinglePoint_BoltzPop_barplot.set_title("SinglePoint Conformer Populations", fontweight="bold", color='#262626')
+
+    # Remove top and right borders
+    SinglePoint_BoltzPop_barplot.spines['top'].set_visible(False)
+    SinglePoint_BoltzPop_barplot.spines['right'].set_visible(False)
+
+    # Change tick and axes color
+    SinglePoint_BoltzPop_barplot.tick_params(axis='both', colors='#262626')  # Change tick labels color to red
+    SinglePoint_BoltzPop_barplot.spines['left'].set_color('dimgrey')         # Change left spine color to blue
+    SinglePoint_BoltzPop_barplot.spines['bottom'].set_color('dimgrey')     # Change bottom spine color to green
+
+    # Tick addition - Changes depending on # of data points)
+
+    # Determine the number of data points
+    num_points = len(SinglePoint_Energies)
+    # Set the number of ticks and the tick interval based on the number of data points
+    if num_points < 100:
+        num_ticks = num_points // 5 + 1
+        tick_interval = 5
+    elif num_points < 300:
+        num_ticks = num_points // 10 + 1
+        tick_interval = 10
+    elif num_points < 1000:
+        num_ticks = num_points // 50 + 1
+        tick_interval = 50
+    else:
+        num_ticks = num_points // 100 + 1
+        tick_interval = 100
+
+    if tick_interval == 5:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    elif tick_interval == 10:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    elif tick_interval == 50:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+    else:
+        tick_labels = range(0, num_ticks * tick_interval, tick_interval)
+
+
+    # Set the x-ticks and labels
+    xticks = [i-1 for i in tick_labels]
+    xtick_labels = [str(i) for i in tick_labels]
+    SinglePoint_BoltzPop_barplot.set_xticks(xticks)
+    SinglePoint_BoltzPop_barplot.set_xticklabels(xtick_labels)
+
+    # Save to .png
+    SinglePoint_BoltzPop_barplot.figure.savefig(filename+'-SinglePoint-Conformer_Boltzmann_Populations.png', bbox_inches="tight")
+    print (f"Energy refinemened conformer Boltzmann populations barplot created for isomer {iso_number}.")
+
+
+
+
+
+
+
+    ##### CREATE NMR SPREADSHEET #####
+
+    ##### PROTON #####
+
+    # Read in NMR isotropic shielding constant Excel spreadsheet
+
+    H_isotropic = pd.read_csv(filename+"-H_isotropic.csv", header=None)
+    # Make index start at 1
+    H_isotropic.index = H_isotropic.index + 1
+    # Remove column with atom numbers
+    H_isotropic2 = H_isotropic.iloc[: , 1:]
+    # Convert H isotropic shielding constants from Pandas dataframe to Numpy array
+    H_isotropic2 = H_isotropic2.to_numpy()
+
+
+
+    # Convert single point energies from Pandas dataframe to Numpy array
+    SinglePoint_Energies2 = SinglePoint_Energies.to_numpy()
+    SinglePoint_Energies2 = SinglePoint_Energies2 / 100
+
+
+
+    MultSP = np.matmul(H_isotropic2, SinglePoint_Energies2)
+
+
+
+    SPBoltzWeightHshiftUnlabeled = pd.DataFrame(MultSP, columns=['Boltzmann Weighted H Shift'])
+    SPBoltzWeightHshiftUnlabeled.index = SPBoltzWeightHshiftUnlabeled.index + 1
+
+    first_columnSP = H_isotropic.iloc[:, 0]
+
+    SPBoltzWeightHshift = pd.concat([first_columnSP, SPBoltzWeightHshiftUnlabeled], axis=1)
+
+    SPBoltzWeightHshift = SPBoltzWeightHshift.rename(columns={0: "Atom Number"})
+    SPBoltzWeightHshiftDF = SPBoltzWeightHshift.style.hide(axis='index')
+
+
+    AtomLabels = pd.DataFrame(columns=['Atom Label'])
+
+    ExpShift = pd.DataFrame(columns=['Exp. Shift'])
+    sp2 = pd.DataFrame(columns=['sp2?'])
+
+
+    SPBoltzWeightHshiftExcel = pd.concat([AtomLabels, SPBoltzWeightHshift], axis=1)
+    SPBoltzWeightHshiftExcel = pd.concat([SPBoltzWeightHshiftExcel, ExpShift], axis=1)
+    SPBoltzWeightHshiftExcel = pd.concat([SPBoltzWeightHshiftExcel, sp2], axis=1)
+    SPBoltzWeightHshiftExcelDF = SPBoltzWeightHshiftExcel.style.hide(axis='index')
+    SPBoltzWeightHshiftExcel.to_csv(filename+'-Boltzmann_Weighted_H_isotropic.csv', index=False)
+
+
+
+
+
+
+    ##### CARBON #####
+
+
+    # C NMR
+
+    # Read in NMR isotropic shielding constant Excel spreadsheet
+
+    C_isotropic = pd.read_csv(filename+"-C_isotropic.csv", header=None)
+    # Make index start at 1
+    C_isotropic.index = C_isotropic.index + 1
+    # Remove column with atom numbers
+    C_isotropic2 = C_isotropic.iloc[: , 1:]
+    # Convert C isotropic shielding constants from Pandas dataframe to Numpy array
+    C_isotropic2 = C_isotropic2.to_numpy()
+
+
+
+    # Convert single point energies from Pandas dataframe to Numpy array
+    SinglePoint_Energies2 = SinglePoint_Energies.to_numpy()
+    SinglePoint_Energies2 = SinglePoint_Energies2 / 100
+
+
+
+    MultSP = np.matmul(C_isotropic2, SinglePoint_Energies2)
+
+
+
+    SPBoltzWeightCshiftUnlabeled = pd.DataFrame(MultSP, columns=['Boltzmann Weighted C Shift'])
+    SPBoltzWeightCshiftUnlabeled.index = SPBoltzWeightCshiftUnlabeled.index + 1
+
+    first_columnSP = C_isotropic.iloc[:, 0]
+
+    SPBoltzWeightCshift = pd.concat([first_columnSP, SPBoltzWeightCshiftUnlabeled], axis=1)
+
+    SPBoltzWeightCshift = SPBoltzWeightCshift.rename(columns={0: "Atom Number"})
+    SPBoltzWeightCshiftDF = SPBoltzWeightCshift.style.hide(axis='index')
+
+
+    AtomLabels = pd.DataFrame(columns=['Atom Label'])
+    ExpShift = pd.DataFrame(columns=['Exp. Shift'])
+    sp2 = pd.DataFrame(columns=['sp2?'])
+
+
+    SPBoltzWeightCshiftExcel = pd.concat([AtomLabels, SPBoltzWeightCshift], axis=1)
+    SPBoltzWeightCshiftExcel = pd.concat([SPBoltzWeightCshiftExcel, ExpShift], axis=1)
+    SPBoltzWeightCshiftExcel = pd.concat([SPBoltzWeightCshiftExcel, sp2], axis=1)
+    SPBoltzWeightCshiftExcelDF = SPBoltzWeightCshiftExcel.style.hide(axis='index')
+    SPBoltzWeightCshiftExcel.to_csv(filename+'-Boltzmann_Weighted_C_isotropic.csv', index=False)
+
+
+    filename = filename2
+
+
+print("\n================================================================================")
+print("")
+print("Before continuing, fill in Atom Labels, Exp. Shift, and mark sp2 centers")
+print("in the following Excel spreadsheets:")
+for iso_number in isomers:
+    filename_iso = (filename + "-iso" + str(iso_number))
+    print(f"    {filename_iso}-Boltzmann_Weighted_C_isotropic.csv")
+    print(f"    {filename_iso}-Boltzmann_Weighted_H_isotropic.csv")
+print("(If there are any degenerate protons (such as methyl groups),")
+print("Create a new row (ex. Me (avg)), average the individual Boltzmann Weighted Shifts")
+print("and add the Exp. Shift to this new row.)")
+print("")
+print(f"Perform DP4+ analysis with:")
+print(f"python3 DP4")
+print("")

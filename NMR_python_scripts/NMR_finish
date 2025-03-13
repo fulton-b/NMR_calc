@@ -1,0 +1,507 @@
+# Import modules
+
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from sklearn import linear_model, datasets
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_squared_error
+import csv
+import os
+import fnmatch
+import shutil
+import warnings
+warnings.filterwarnings("ignore")
+import matplotlib.colors as colors
+
+# Set the global figure size
+plt.rcParams['figure.figsize'] = (6, 3)  # Adjust the width and height as needed
+
+
+
+##### USER INPUT #####
+
+# Print message for user input (filename)
+filename = input("\nEnter file name (omit extensions): \n")
+
+print (f"\nProcessing... Please wait...")
+###########
+
+##### Read in NMR chemical shift csv file #####
+
+
+### Proton atom labels ###
+
+# Read in spreadsheet
+H_atomlabels = pd.read_excel(filename+"-iso1-Boltzmann_Weighted_H_isotropic-sorted.xlsx")
+# Start index at 1
+H_atomlabels.index = H_atomlabels.index + 1
+H_atomlabels = H_atomlabels.dropna(subset=['Exp. Shift'])
+
+### Carbon atom labels ###
+
+# Read in spreadsheet
+C_atomlabels = pd.read_excel(filename+"-iso1-Boltzmann_Weighted_C_isotropic-sorted.xlsx")
+# Start index at 1
+C_atomlabels.index = C_atomlabels.index + 1
+C_atomlabels = C_atomlabels.dropna(subset=['Exp. Shift'])
+
+
+
+##### Proton Error Plot #####
+
+DP4plus_Errors = pd.read_excel(filename+"-custom-dp4plus.xlsx", sheet_name = 'ScaledErrors', header=None)
+
+
+DP4plus_Errors1 = DP4plus_Errors.iloc[1: , :]
+DP4plus_Errors2 = DP4plus_Errors.iloc[1: , :]
+
+
+Proton = DP4plus_Errors1[DP4plus_Errors1[0] == "H"]
+Proton.reset_index(drop=True, inplace=True)
+Proton.index = Proton.index + 1
+Proton2 = Proton.drop(Proton.columns[[1]], axis = 1)
+Proton2 = pd.DataFrame(Proton2)
+Proton2[0] = H_atomlabels['Atom Label']
+Proton2.columns = np.arange(len(Proton2.columns))
+
+# third color'#A49C9C'
+plt.figure()
+hex_colors = ['#92ABE2', '#ffd489']
+cmap_custom = colors.ListedColormap(hex_colors)
+cmap1 = cmap_custom
+ErrorPlotH = Proton2.plot.bar(x=0, cmap=cmap1, width=0.8)
+ErrorPlotH.set_xlabel("Atom Label", fontsize=10, color='#262626')
+ErrorPlotH.set_ylabel("Error (ppm)", fontsize=10, color='#262626')
+ErrorPlotH.set_title("$^1$H Chemical Shift Error", fontweight="bold", color='#262626')
+# Add legend labels
+isomer_labels = ['isomer 1', 'isomer 2', 'isomer 3', ..., 'isomer n']
+num_labels = len(isomer_labels)
+ErrorPlotH.legend(isomer_labels)
+ErrorPlotH.set_facecolor('ghostwhite')
+
+# Remove top and right borders
+ErrorPlotH.spines['top'].set_visible(False)
+ErrorPlotH.spines['right'].set_visible(False)
+
+# Change tick and axes color
+ErrorPlotH.tick_params(axis='both', colors='dimgrey')  # Change tick labels color to red
+ErrorPlotH.spines['left'].set_color('dimgrey')         # Change left spine color to blue
+ErrorPlotH.spines['bottom'].set_color('dimgrey')     # Change bottom spine color to green
+
+
+ErrorPlotH.figure.savefig(filename+'-H_error_bar.png', bbox_inches="tight")
+
+
+
+##### Proton Linear Regression - H #####
+
+
+DP4plus_Errors_LR = pd.read_excel(filename+"-custom-dp4plus.xlsx", sheet_name = 'Scaled', header=None)
+DP4plus_Errors_LR = DP4plus_Errors_LR.iloc[1: , :]
+HShift_LR = DP4plus_Errors_LR[DP4plus_Errors2[0] == "H"]
+HShift_LR = HShift_LR.dropna(axis=1)
+HShift_LR = HShift_LR.loc[:, ~(HShift_LR == '-').any()]
+N = len(HShift_LR.columns)
+n = (N-1)/2
+n = int(n)
+
+for i in range(n):
+        del HShift_LR[HShift_LR.columns.values[-1]]
+
+HShift_LR = HShift_LR.iloc[: , 1:]
+
+
+
+X = HShift_LR[1].to_numpy().reshape(-1,1)
+for i in (HShift_LR.columns):
+    
+    if i == 0: pass
+    if i == len(HShift_LR.columns): pass
+    else:
+            y = HShift_LR[i+1].to_numpy().reshape(-1,1)
+            X = X.astype(float)
+            y = y.astype(float)
+
+            # Fit line using all data
+            lr = linear_model.LinearRegression()
+            lr = lr.fit(y, X)
+
+            # Predict data of estimated models
+            line_X = np.arange(X.min(), X.max())[:, np.newaxis]
+            line_y = lr.predict(line_X)
+
+            # Compare estimated coefficients
+            LR = {'Linear Regression': [lr.coef_]}
+            RANSAC = pd.DataFrame(data=LR)
+                
+            RANSAC['Linear Regression'] = RANSAC['Linear Regression'].str[0]
+            RANSAC['Linear Regression'] = RANSAC['Linear Regression'].str[0]
+          
+            RANSAC = RANSAC.style.hide(axis='index')
+
+            RANSAC = RANSAC.data
+
+            RANSAC.to_csv(filename+'-iso'+str(i)+'-H_linear_regression.csv', index=False)
+
+            lw = 2
+            plt.figure()
+            plt.scatter(
+                X, y, color="black", marker=".", label="Inliers"
+            )
+
+            plt.plot(line_X, line_y, color="cornflowerblue", linewidth=lw, label="Linear regressor", linestyle="-")
+            
+            Rtext = lr.coef_
+            Rtext = str(Rtext).replace('[[',' ').replace(']]',' ')
+            Rtext
+            
+            minX = min(X)
+            maxy = max(y)
+
+            
+            #plt.legend(loc="lower right")
+            plt.xlabel("Experimental H Chemical Shifts (ppm)", fontsize=12)
+            plt.ylabel("Calculated H Chemical Shifts (ppm)", fontsize=12)
+            plt.title('Isomer '+str(i), fontsize=18, fontweight="bold")
+            plt.annotate('R^2 = '+Rtext, xy=(minX+0.5,maxy-1),fontsize=12)
+            plt.savefig(filename+'-iso'+str(i)+'-H_linear_regression.png', bbox_inches="tight")
+            #plt.show()
+
+
+
+
+
+
+
+##### Carbon Error Plot #####
+
+DP4plus_Errors = pd.read_excel(filename+"-custom-dp4plus.xlsx", sheet_name = 'ScaledErrors', header=None)
+
+#not sure what this does
+DP4plus_Errors1 = DP4plus_Errors.iloc[1: , :]
+DP4plus_Errors2 = DP4plus_Errors.iloc[1: , :]
+
+
+Carbon = DP4plus_Errors1[DP4plus_Errors1[0] == "C"]
+Carbon.reset_index(drop=True, inplace=True)
+Carbon.index = Carbon.index + 1
+Carbon2 = Carbon.drop(Carbon.columns[[1]], axis = 1)
+Carbon2 = pd.DataFrame(Carbon2)
+Carbon2[0] = C_atomlabels['Atom Label']
+Carbon2.columns = np.arange(len(Carbon2.columns))
+
+# third color'#A49C9C'
+plt.figure()
+hex_colors = ['#92ABE2', '#ffd489']
+#alt color '#FFC664'
+cmap_custom = colors.ListedColormap(hex_colors)
+cmap1 = cmap_custom
+ErrorPlotC = Carbon2.plot.bar(x=0, cmap=cmap1, width=0.8)
+ErrorPlotC.set_xlabel("Atom Label", fontsize=10, color='#262626')
+ErrorPlotC.set_ylabel("Error (ppm)", fontsize=10, color='#262626')
+ErrorPlotC.set_title("$^{13}$C Chemical Shift Error", fontweight="bold", color='#262626')
+# Add legend labels
+isomer_labels = ['isomer 1', 'isomer 2', 'isomer 3', ..., 'isomer n']
+num_labels = len(isomer_labels)
+ErrorPlotC.legend(isomer_labels)
+ErrorPlotC.set_facecolor('ghostwhite')
+
+# Remove top and right borders
+ErrorPlotC.spines['top'].set_visible(False)
+ErrorPlotC.spines['right'].set_visible(False)
+
+# Change tick and axes color
+ErrorPlotC.tick_params(axis='both', colors='dimgrey')  # Change tick labels color to red
+ErrorPlotC.spines['left'].set_color('dimgrey')         # Change left spine color to blue
+ErrorPlotC.spines['bottom'].set_color('dimgrey')     # Change bottom spine color to green
+
+
+ErrorPlotC.figure.savefig(filename+'-C_error_bar.png', bbox_inches="tight")
+
+
+
+##### Carbon Linear Regression - H #####
+
+
+DP4plus_Errors_LR = pd.read_excel(filename+"-custom-dp4plus.xlsx", sheet_name = 'Scaled', header=None)
+DP4plus_Errors_LR = DP4plus_Errors_LR.iloc[1: , :]
+CShift_LR = DP4plus_Errors_LR[DP4plus_Errors[0] == "C"]
+CShift_LR = CShift_LR.dropna(axis=1)
+CShift_LR = CShift_LR.loc[:, ~(CShift_LR == '-').any()]
+CN = len(CShift_LR.columns)
+Cn = (CN-1)/2
+Cn = int(Cn)
+
+for i in range(n):
+        del CShift_LR[CShift_LR.columns.values[-1]]
+
+
+
+
+
+
+CShift_LR = CShift_LR.iloc[: , 1:]
+
+CX = CShift_LR[1].to_numpy().reshape(-1,1)
+for i in (CShift_LR.columns):
+    
+    if i == 0: pass
+    if i == len(CShift_LR.columns): pass
+    else:
+            Cy = CShift_LR[i+1].to_numpy().reshape(-1,1)
+            CX = CX.astype(float)
+            Cy = Cy.astype(float)
+    
+            # Fit line using all data
+            Clr = linear_model.LinearRegression()
+            Clr = Clr.fit(Cy, CX)
+
+            # Predict data of estimated models
+            Cline_X = np.arange(CX.min(), CX.max())[:, np.newaxis]
+            Cline_y = Clr.predict(Cline_X)
+
+
+          
+
+            # Compare estimated coefficients
+            CLR = {'Linear Regression': [Clr.coef_]}
+            CRANSAC = pd.DataFrame(data=LR)
+       
+            
+            CRANSAC['Linear Regression'] = CRANSAC['Linear Regression'].str[0]
+            CRANSAC['Linear Regression'] = CRANSAC['Linear Regression'].str[0]
+
+            
+            CRANSAC = CRANSAC.style.hide(axis='index')
+
+            CRANSAC = CRANSAC.data
+
+            CRANSAC.to_csv(filename+'-iso'+str(i)+'-C_linear_regression.csv', index=False)
+
+
+            lw = 2
+            plt.figure()
+            plt.scatter(
+                CX, Cy, color="black", marker=".", label="Inliers"
+            )
+
+
+
+
+            plt.plot(Cline_X, Cline_y, color="cornflowerblue", linewidth=lw, label="Linear regressor", linestyle="-")
+            
+            CRtext = Clr.coef_
+            CRtext = str(CRtext).replace('[[',' ').replace(']]',' ')
+            CRtext
+            
+            CminX = min(CX)
+            Cmaxy = max(Cy)
+
+            
+            #plt.legend(loc="lower right")
+            plt.xlabel("Experimental C Chemical Shifts (ppm)", fontsize=12)
+            plt.ylabel("Calculated C Chemical Shifts (ppm)", fontsize=12)
+            plt.title('Isomer '+str(i), fontsize=18, fontweight="bold")
+            plt.annotate('R^2 = '+CRtext, xy=(CminX+10,Cmaxy-15),fontsize=12)
+            plt.savefig(filename+'-iso'+str(i)+'-C_linear_regression.png', bbox_inches="tight")
+            #plt.show()
+
+
+
+
+##### Read proton/carbon error #####
+
+DP4plus_Errors = pd.read_excel(filename+"-custom-dp4plus.xlsx", sheet_name = 'ScaledErrors', header=None)
+DP4plus_Errors1 = DP4plus_Errors.iloc[1: , :]
+DP4plus_Errors2 = DP4plus_Errors.iloc[1: , :]
+
+Proton = DP4plus_Errors1[DP4plus_Errors1[0] == "H"]
+Proton.reset_index(drop=True, inplace=True)
+Proton.index = Proton.index + 1
+
+Carbon = DP4plus_Errors1[DP4plus_Errors1[0] == "C"]
+Carbon.reset_index(drop=True, inplace=True)
+Carbon.index = Carbon.index + 1
+
+# Linear regression
+DP4plus_LR = pd.read_excel(filename+"-custom-dp4plus.xlsx", sheet_name = 'Scaled', header=None)
+DP4plus_LR1 = DP4plus_LR.iloc[1: , :]
+DP4plus_LR2 = DP4plus_LR.iloc[1: , :]
+
+Proton_LR = DP4plus_LR1[DP4plus_LR1[0] == "H"]
+Proton_LR.reset_index(drop=True, inplace=True)
+Proton_LR.index = Proton_LR.index + 1
+
+
+Carbon_LR = DP4plus_LR1[DP4plus_LR1[0] == "C"]
+Carbon_LR.reset_index(drop=True, inplace=True)
+Carbon_LR.index = Carbon_LR.index + 1
+
+
+# Count number of isomers
+num_iso = sum(pd.to_numeric(Proton.iloc[1], errors='coerce').notnull())
+num_iso = num_iso-1
+
+
+
+##### STATISTICS #####
+
+H_CMAE_dict = {}
+H_CRMSE_dict = {}
+H_MaxErr_dict = {}
+H_LinReg_dict = {}
+C_CMAE_dict = {}
+C_CRMSE_dict = {}
+C_MaxErr_dict = {}
+C_LinReg_dict = {}
+
+
+
+for i in range(1, num_iso+1):
+	H_CMAE_iso = mean_absolute_error(Proton[i+1], np.zeros(len(Proton)))
+	H_CMAE_dict[f'H_CMAE_iso{i}'] = H_CMAE_iso
+	H_CRMSE_iso = np.sqrt(mean_squared_error(Proton[i+1], np.zeros(len(Proton))))
+	H_CRMSE_dict[f'H_CRMSE_iso{i}'] = H_CRMSE_iso
+	H_MaxErr_iso = np.max(np.abs(Proton[i+1]))
+	H_MaxErr_dict[f'H_MaxErr_iso{i}'] = H_MaxErr_iso
+	C_CMAE_iso = mean_absolute_error(Carbon[i+1], np.zeros(len(Carbon)))
+	C_CMAE_dict[f'C_CMAE_iso{i}'] = C_CMAE_iso
+	C_CRMSE_iso = np.sqrt(mean_squared_error(Carbon[i+1], np.zeros(len(Carbon))))
+	C_CRMSE_dict[f'C_CRMSE_iso{i}'] = C_CRMSE_iso
+	C_MaxErr_iso = np.max(np.abs(Carbon[i+1]))
+	C_MaxErr_dict[f'C_MaxErr_iso{i}'] = C_MaxErr_iso
+	
+	### Proton linear regression
+	# Linear regression analysis for each isomer
+	X_H = Proton_LR.iloc[:, i+1].values.reshape(-1, 1)
+	y_H = Proton_LR.iloc[:, 1].values.reshape(-1, 1)
+
+	LR_H = linear_model.LinearRegression()
+	LR_H.fit(X_H, y_H)
+
+	slope_H = LR_H.coef_[0][0]
+	intercept_H = LR_H.intercept_[0]
+
+	# Store the slope and intercept for each isomer
+	H_LinReg_dict[f'H_slope_iso{i}'] = slope_H
+	#H_LinReg_dict[f'H_intercept_iso{i}'] = intercept_H
+
+
+	### Carbon linear regression
+	# Linear regression analysis for each isomer
+	X_C = Carbon_LR.iloc[:, i+1].values.reshape(-1, 1)
+	y_C = Carbon_LR.iloc[:, 1].values.reshape(-1, 1)
+
+	LR_C = linear_model.LinearRegression()
+	LR_C.fit(X_C, y_C)
+
+	slope_C = LR_C.coef_[0][0]
+	intercept_C = LR_C.intercept_[0]
+
+	# Store the slope and intercept for each isomer
+	C_LinReg_dict[f'C_slope_iso{i}'] = slope_C
+	#C_LinReg_dict[f'C_intercept_iso{i}'] = intercept_C
+
+
+
+
+
+
+
+
+
+# Create a list of isomers
+isomers = [f'iso{i}' for i in range(1, num_iso+1)]
+
+# Define the output filename
+output_filename = filename+'_Statistics.csv'
+
+# Open the output file in write mode
+with open(output_filename, 'w', newline='') as csvfile:
+    # Create a CSV writer object
+    writer = csv.writer(csvfile)
+    
+    # Write the header row
+    writer.writerow(['Statistic', 'Value'])
+    
+
+# Write the rows for each isomer
+    for iso in isomers:
+        iso_num = iso[-1]
+        writer.writerow([f'H CMAE iso{iso_num}', H_CMAE_dict[f'H_CMAE_iso{iso_num}']])
+        writer.writerow([f'H CRMSE iso{iso_num}', H_CRMSE_dict[f'H_CRMSE_iso{iso_num}']])
+        writer.writerow([f'H MaxErr iso{iso_num}', H_MaxErr_dict[f'H_MaxErr_iso{iso_num}']])
+        writer.writerow([f'H LinReg iso{iso_num}', H_LinReg_dict[f'H_slope_iso{iso_num}']])
+        writer.writerow([f'C CMAE iso{iso_num}', C_CMAE_dict[f'C_CMAE_iso{iso_num}']])
+        writer.writerow([f'C CRMSE iso{iso_num}', C_CRMSE_dict[f'C_CRMSE_iso{iso_num}']])
+        writer.writerow([f'C MaxErr iso{iso_num}', C_MaxErr_dict[f'C_MaxErr_iso{iso_num}']])
+        writer.writerow([f'C LinReg iso{iso_num}', C_LinReg_dict[f'C_slope_iso{iso_num}']])
+
+
+
+
+
+
+# Get the current directory
+current_dir = os.getcwd()
+
+# Create top-level directories
+os.makedirs(f"{filename}/Analysis/DP4")
+os.makedirs(f"{filename}/Analysis/Statistics")
+os.makedirs(f"{filename}/Analysis/NMR_Comparison")
+
+# Loop through the possible values of X from 1 to 128
+for i in range(1, 129):
+    # Construct the file name pattern for this value of X
+    file_name_pattern = f"{filename}-iso{i}-*.csv"
+
+    # Get a list of file names in the current directory that match the pattern
+    file_names = [fn for fn in os.listdir(current_dir) if fnmatch.fnmatch(fn, file_name_pattern)]
+
+    if file_names:
+        # Create directories for this value of X
+        iso_part = f"iso{i}"
+        filename_iso = f"{filename}/{filename}-{iso_part}"
+        os.makedirs(f"{filename_iso}/Energy/Energy_Plots")
+        os.makedirs(f"{filename_iso}/Energy/Spreadsheets")
+        os.makedirs(f"{filename_iso}/NMR/Chemical_Shifts")
+        os.makedirs(f"{filename_iso}/NMR/Linear_Regression/LR_Plots")
+        os.makedirs(f"{filename_iso}/NMR/Linear_Regression/Spreadsheets")
+        os.makedirs(f"{filename_iso}/Structures")
+
+        # Move files to corresponding directories
+        shutil.move(f"{filename}-iso{i}-Boltzmann_Weighted_C_isotropic-sorted.xlsx", f"{filename_iso}/NMR/Chemical_Shifts")
+        shutil.move(f"{filename}-iso{i}-Boltzmann_Weighted_C_isotropic.csv", f"{filename_iso}/NMR/Chemical_Shifts")
+        shutil.move(f"{filename}-iso{i}-Boltzmann_Weighted_H_isotropic-sorted.xlsx", f"{filename_iso}/NMR/Chemical_Shifts")
+        shutil.move(f"{filename}-iso{i}-Boltzmann_Weighted_H_isotropic.csv", f"{filename_iso}/NMR/Chemical_Shifts")
+        shutil.move(f"{filename}-iso{i}-NMR-conf-0001.out", f"{filename_iso}/Structures")
+        shutil.move(f"{filename}-iso{i}-CREST-Conformer_Energies.csv", f"{filename_iso}/Energy/Spreadsheets")
+        shutil.move(f"{filename}-iso{i}-CREST-Conformer_Energies.png", f"{filename_iso}/Energy/Energy_Plots")
+        shutil.move(f"{filename}-iso{i}-C_isotropic.csv", f"{filename_iso}/NMR/Chemical_Shifts")
+        shutil.move(f"{filename}-iso{i}-C_linear_regression.csv", f"{filename_iso}/NMR/Linear_Regression/Spreadsheets")
+        shutil.move(f"{filename}-iso{i}-C_linear_regression.png", f"{filename_iso}/NMR/Linear_Regression/LR_Plots")
+        shutil.move(f"{filename}-iso{i}-Energy-Conformer_Energies.csv", f"{filename_iso}/Energy/Spreadsheets")
+        shutil.move(f"{filename}-iso{i}-H_isotropic.csv", f"{filename_iso}/NMR/Chemical_Shifts")
+        shutil.move(f"{filename}-iso{i}-H_linear_regression.csv", f"{filename_iso}/NMR/Linear_Regression/Spreadsheets")
+        shutil.move(f"{filename}-iso{i}-H_linear_regression.png", f"{filename_iso}/NMR/Linear_Regression/LR_Plots")
+        shutil.move(f"{filename}-iso{i}-OptFreq-Conformer_Energies.csv", f"{filename_iso}/Energy/Spreadsheets")
+        shutil.move(f"{filename}-iso{i}-OptFreq-Conformer_Boltzmann_Populations.png", f"{filename_iso}/Energy/Energy_Plots")
+        shutil.move(f"{filename}-iso{i}-SinglePoint-Conformer_Boltzmann_Populations.png", f"{filename_iso}/Energy/Energy_Plots")
+
+
+shutil.move(f"{filename}-C_error_bar.png", f"{filename}/Analysis/NMR_Comparison")
+shutil.move(f"{filename}-H_error_bar.png", f"{filename}/Analysis/NMR_Comparison")
+shutil.move(f"{filename}-custom-dp4plus.xlsx", f"{filename}/Analysis/DP4")
+shutil.move(f"{filename}_Statistics.csv", f"{filename}/Analysis/Statistics")
+
+
+print("\n================================================================================")
+print("")
+print("Calculations complete")
+print(f"Your files have been stored in {filename}")
+print("")
+
+

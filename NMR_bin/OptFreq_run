@@ -1,0 +1,114 @@
+#! /bin/bash
+
+##### ERROR CHECKING #####
+
+
+# Find the first .gjf file in the current directory
+file=$(find . -maxdepth 1 -type f -name "*.gjf" | head -n 1)
+
+if [ -z "$file" ]; then
+  echo "No .gjf files found in the current directory."
+  exit 1
+fi
+
+# Extract the filename from the first .gjf file
+filename=$(echo "$file" | sed 's#\./##;s#\(-OptFreq-conf-[0-9]*\.gjf\).*##')
+
+
+if [ -z "$filename" ]; then
+  echo "Failed to extract filename from $file"
+  exit 1
+fi
+
+
+# Check for filename/OptFreq/Input in parent directories
+found_input_dir=false
+dir=$(dirname "$(pwd)")
+while [ "$dir" != "/" ]; do
+    if [ -d "$dir/$filename/OptFreq/Input" ]; then
+        found_input_dir=true
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+if ! $found_input_dir; then
+    echo "No matching filename/OptFreq/Input directory found in parent directories"
+    exit 1
+fi
+
+
+##### MENU #####
+
+echo -e "\nEnter conformer number: "
+read number
+number=$(printf "%04d" $number)
+echo ''
+
+#### CHECKING FOR DUPLICATES ####
+
+if [[ -e "../Output/$filename-OptFreq-conf-$number.out" ]]; then
+  echo "A file with the same name is already present in ../Output"
+  echo "Do you wish to continue/overwrite? (y/n)"
+  read choice
+  if [[ "$choice" != "y" ]]; then
+    echo ""
+    exit 1
+  fi
+  echo ""
+fi
+
+if [[ -e "../Input/$filename-OptFreq-conf-$number.out" ]]; then
+  echo "A file with the same name already exists in the current directory."
+  echo "Do you wish to continue/overwrite? (y/n)"
+  read choice
+  if [[ "$choice" != "y" ]]; then
+    echo ""
+    exit 1
+  fi
+  echo ""
+fi
+
+if [[ -e "../Output/Chk/$filename-OptFreq-conf-$number.chk" ]]; then
+  echo "A checkpoint file for this conformer already exists in ../Output/Chk"
+  echo "Do you wish to continue/overwrite? (y/n)"
+  read choice
+  if [[ "$choice" != "y" ]]; then
+    echo ""
+    exit 1
+  fi
+  echo ""
+fi
+
+
+#### Gaussian Input ####
+# Customize this part for job submission on your system
+
+gversion=g16
+g16root=/usr/local/gaussian/g16c01
+
+source $g16root/$gversion/bsd/$gversion.profile
+export GAUSS_SCRDIR=~/scratch/gaussian/
+
+task=$filename-OptFreq-conf-$number
+task="${task%.*}"
+
+$g16root/$gversion/$gversion $task.gjf $task.out &
+
+
+
+
+##### EXIT MESSAGES #####
+
+echo -e  "========================================================================"
+echo ""
+echo "  Your OptFreq job has been submitted."
+echo "  Conformer #: $number"
+echo ""
+echo "========================================================================"
+echo ""
+echo "  After all jobs complete, organize OptFreq files with:"
+echo "  $ OptFreq_process"
+echo ""
+
+

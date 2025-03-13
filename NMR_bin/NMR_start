@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# Prompt the user for the name of the parent directory
+
+echo -e "\nEnter desired directory name:"
+read parent_dir
+echo -e "\n========================================================================\n"
+
+# Check if parent_dir contains only alphanumeric characters, _, and -
+if ! [[ "$parent_dir" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: Directory name should only contain alphanumeric characters, _, or -."
+    exit 1
+fi
+
+# Check if parent_dir has the desired format: $filename-iso#.xyz
+if ! [[ "$parent_dir" =~ ^[a-zA-Z0-9_-]+-iso([1-9]|[1-9][0-9]|[1-9][0-9]{2}|1[01][0-9]|12[0-8])$ ]]; then
+    echo "Error: Directory name should have the format of filename-iso#, where # is a number 1-128."
+    exit 1
+fi
+
+# Create the parent directory if it doesn't exist
+if [ ! -d "$parent_dir" ]; then
+  mkdir "$parent_dir"
+fi
+
+# Create the five subdirectories with Input and Output subdirectories
+echo "  Parent directory created: $parent_dir"
+echo "  Subdirectories created: CREST, OptFreq, NMR, Energy, Data"
+echo "  Input and Output folders created."
+subdir_names=("CREST")
+for subdir_name in "${subdir_names[@]}"
+do
+    mkdir -p "$parent_dir/$subdir_name/Input"
+    mkdir -p "$parent_dir/$subdir_name/Output"
+done
+subdir_names=("OptFreq" "NMR" "Energy")
+for subdir_name in "${subdir_names[@]}"
+do
+    mkdir -p "$parent_dir/$subdir_name/Input"
+    mkdir -p "$parent_dir/$subdir_name/Output/Chk"
+done
+mkdir -p "$parent_dir/Data"
+
+
+# Move file to CREST/Input
+if [ -f "${parent_dir}.xyz" ]; then
+    mv "${parent_dir}.xyz" "$parent_dir/CREST/Input"
+    echo -e "  ${parent_dir}.xyz moved to /CREST/Input\n\n========================================================================\n\n  Continue here:\n  cd $parent_dir/CREST/Input\n"
+    echo -e "  Submit CREST jobs:\n  $ CREST_run\n"
+else
+    echo -e "\nError: ${parent_dir}.xyz file not found in current directory. Exiting."
+    exit 1
+fi

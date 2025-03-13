@@ -1,0 +1,110 @@
+#!/bin/bash
+
+##### DETECT FILE NAME #####
+
+# Find the first .out file that matches the pattern "variable-NMR-conf-*.out"
+out_file=$(find . -name "*-NMR-conf-*.out" | head -1)
+
+if [[ -z "$out_file" ]]; then
+  echo "No .out file found in current directory"
+  exit 1
+fi
+
+# Extract the filename from the .out file and remove the "-NMR-conf-*.out" pattern
+filename=$(basename "$out_file" "-NMR-conf-*.out" | sed 's/-NMR-conf-.*//')
+
+
+
+
+# Check for filename/NMR/Input in parent directories
+found_input_dir=false
+dir=$(dirname "$(pwd)")
+while [ "$dir" != "/" ]; do
+    if [ -d "$dir/$filename/NMR/Input" ]; then
+        found_input_dir=true
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+if ! $found_input_dir; then
+    echo "No matching filename/NMR/Input directory found in parent directories"
+    exit 1
+fi
+
+
+
+
+##### EXCEL SPREADSHEET CREATION #####
+
+# Count number of conformers
+conf=$(ls -dq $filename-NMR-conf-*.out | wc -l)
+
+
+# Extract H atom numbers
+grep 'H    Isotropic' "$(ls $filename-NMR-conf-*.out | head -n1)" | awk '{print $1}'  > H_atom_numbers.txt
+# Extract H Isotropic shielding constants
+grep -oE '[0-9]\s+H\s+Isotropic\s+=\s+([0-9]+\.[0-9]+)' $filename-NMR-conf-*.out | awk '{print $NF}' > H_isotropic_shielding_constants.txt
+split --numeric-suffixes=1 -d -l $(( $(wc -l < H_isotropic_shielding_constants.txt) / $conf )) H_isotropic_shielding_constants.txt H_conformer-
+paste H_atom_numbers.txt H_conformer-* | tr '\t' ',' > $filename-H_isotropic.csv
+
+
+## Extract C atom numbers
+#grep 'C    Isotropic' "$(ls $filename-NMR-conf-*.out | head -n1)" | awk '{print $1}'  > C_atom_numbers.txt
+## Extract C Isotropic shielding constants
+#grep -oE '[0-9]\s+C\s+Isotropic\s+=\s+([0-9]+\.[0-9]+)' $filename-NMR-conf-*.out | awk '{print $NF}' > #C_isotropic_shielding_constants.txt
+#split --numeric-suffixes=1 -d -l $(( $(wc -l < C_isotropic_shielding_constants.txt) / $conf )) #C_isotropic_shielding_constants.txt C_conformer-
+#paste C_atom_numbers.txt C_conformer-* | tr '\t' ',' > $filename-C_isotropic.csv
+
+
+####################### Noticed issue above with OLdmdo_2004_16a_DEFAULT-iso1
+########## Is the issue negative isotropic shielding constants?
+# Fix attempt 1.0
+
+# Extract C atom numbers
+grep 'C    Isotropic' "$(ls $filename-NMR-conf-*.out | head -n1)" | awk '{print $1}'  > C_atom_numbers.txt
+# Extract C Isotropic shielding constants
+grep -oE 'C\s+Isotropic\s+=\s+(-?[0-9]+\.[0-9]+)' $filename-NMR-conf-*.out | awk '{print $NF}' > C_isotropic_shielding_constants.txt
+split --numeric-suffixes=1 -d -l $(( $(wc -l < C_isotropic_shielding_constants.txt) / $conf )) C_isotropic_shielding_constants.txt C_conformer-
+paste C_atom_numbers.txt C_conformer-* | tr '\t' ',' > $filename-C_isotropic.csv
+
+
+rm H_conformer-* C_conformer-* H_atom_numbers.txt H_isotropic_shielding_constants.txt C_atom_numbers.txt C_isotropic_shielding_constants.txt
+
+
+
+mv $filename-H_isotropic.csv $filename-C_isotropic.csv ../../Data
+
+
+
+
+
+
+
+
+
+
+##### MOVE OUTPUT FILES #####
+
+cp $filename-NMR-conf-0001.out ../../Data
+mv $filename-NMR-conf-*.out ../Output
+
+
+##### EXIT MESSAGE #####
+
+echo -e "\n========================================================================"
+echo -e "\n  NMR .out files moved to ../Output"
+echo "  Lowest energy conformer .out also copied to ../../Data"
+echo "  Excel spreadsheet containing NMR isotropic shielding constants created."
+echo -e "  Excel spreadsheet moved to ../../Data"
+
+
+echo -e "\n========================================================================"
+echo ""
+echo "  Continue:"
+echo "  cd ~/$filename/Data"
+echo ''
+echo "  After all Energy and NMR calculations are complete,"
+echo "  move files to personal computer and continue with Python:"
+echo "  $ python3 Energy_plot"
+echo ""

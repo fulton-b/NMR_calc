@@ -1,0 +1,260 @@
+#!/bin/bash
+
+
+##### ERROR CHECKING #####
+
+# Check for filename in the current directory
+if [ -f *-conformers.xyz ]; then
+    # Extract filename from the *-conformers.xyz file
+    filename=$(basename *-conformers.xyz -conformers.xyz)
+else
+    echo "No *-conformers.xyz file found in current directory"
+    exit 1
+fi
+
+# Check for filename/CREST/Output in parent directories
+found_input_dir=false
+dir=$(dirname "$(pwd)")
+while [ "$dir" != "/" ]; do
+    if [ -d "$dir/$filename/CREST/Output" ]; then
+        found_input_dir=true
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+if ! $found_input_dir; then
+    echo "No matching filename/CREST/Output directory found in parent directories"
+    exit 1
+fi
+
+
+##### MENU #####
+
+echo -e  "\n================================================="
+echo ""
+echo "  Optimization + Frequency Calculation Settings "
+echo -e  "\n================================================="
+
+
+
+echo "
+  Choose method:
+
+  1. DP4+ (optimal)
+  2. B3LYP
+  3. m062x
+  4. mPW1PW91
+  0. Quit
+"
+read -p "  Enter selection [0-4]: "
+
+if [[ "$REPLY" =~ ^[0-4]$ ]]; then
+	if [[ "$REPLY" == 0 ]]; then
+		echo ""
+		echo "Program terminated."
+		echo ""
+		exit
+	fi
+	if [[ "$REPLY" == 1 ]]; then
+		method=b3lyp
+		
+	fi
+
+	if [[ "$REPLY" == 2 ]]; then
+		method=b3lyp
+		
+	fi
+	if [[ "$REPLY" == 3 ]]; then
+		method=m062x
+		
+	fi
+	if [[ "$REPLY" == 4 ]]; then
+		method=mPW1PW91
+		
+	fi
+
+else
+	echo ""
+	echo "Invalid entry." >&2
+	echo ""
+	exit 1
+fi
+
+echo "
+
+  Choose basis set:
+
+  1. DP4+ (optimal)
+  2. 6-31G(d)
+  3. 6-31G(d,p)
+  4. 6-31+G(d,p)
+  5. 6-311+G(2d,p)
+  6. aug-cc-pVDZ
+  0. Quit
+"
+read -p "  Enter selection [0-6]: "
+
+if [[ "$REPLY" =~ ^[0-6]$ ]]; then
+	if [[ "$REPLY" == 0 ]]; then
+		echo ""
+		echo "Program terminated."
+		echo ""
+		exit
+	fi
+	if [[ "$REPLY" == 1 ]]; then
+		basis=6-31g\(d,p\)
+	fi
+
+	if [[ "$REPLY" == 2 ]]; then
+		basis=6-31g\(d\)
+	fi
+	if [[ "$REPLY" == 3 ]]; then
+		basis=6-31g\(d,p\)	
+	fi
+	if [[ "$REPLY" == 4 ]]; then
+		basis=6-31+g\(d,p\)
+	fi
+	if [[ "$REPLY" == 5 ]]; then
+		basis=6-311+g\(2d,p\)	
+	fi
+	if [[ "$REPLY" == 6 ]]; then
+		basis=aug-cc-pVDZ	
+	fi
+
+
+else
+	echo ""
+	echo "Invalid entry." >&2
+	echo ""
+	exit 1
+fi
+
+
+echo "
+
+  Choose number of processors:
+
+  1. 1
+  2. 2
+  3. 4
+  4. 8
+  5. 12
+  6. 16
+  0. Quit
+"
+read -p "  Enter selection [0-6]: "
+
+if [[ "$REPLY" =~ ^[0-6]$ ]]; then
+	if [[ "$REPLY" == 0 ]]; then
+		echo ""
+		echo "Program terminated."
+		echo ""
+		exit
+	fi
+	if [[ "$REPLY" == 1 ]]; then
+		processors=1	
+	fi
+	if [[ "$REPLY" == 2 ]]; then
+		processors=2	
+	fi
+	if [[ "$REPLY" == 3 ]]; then
+		processors=4	
+	fi
+	if [[ "$REPLY" == 4 ]]; then
+		processors=8	
+	fi
+	if [[ "$REPLY" == 5 ]]; then
+		processors=12	
+	fi
+	if [[ "$REPLY" == 6 ]]; then
+		processors=16	
+	fi
+
+
+
+
+else
+	echo ""
+	echo "Invalid entry." >&2
+	echo ""
+	exit 1
+fi
+
+
+
+
+
+##### CREATE GAUSSIAN JOB FILES #####
+
+atoms=$(head -1 $filename-conformers.xyz | awk '{print $1}')
+conf_num=$(grep -o "  $atoms" $filename-conformers.xyz | wc -l)
+
+# Formatting
+# Split conformer file into separate files using process substitution
+split -l $((atoms+2)) --numeric-suffixes=1 --suffix-length=4 <(cat $filename-conformers.xyz) conformer-
+# Remove first 2 lines of each 
+sed -i '1,2d' conformer-*
+# Add 2 blank lines at the end of each file
+for i in conformer-*; do
+    printf '\n\n' >> "$i";
+done
+
+
+
+# Add Gaussian heading
+# Detect Username
+username=$(whoami)
+
+# Generate Numbers
+for file in conformer-*; do
+  # remove "conformer-" prefix
+  conf_num2=${file#conformer-} 
+  sed -i "1i \\
+%nprocshared=$processors \\
+%mem=4GB \\
+%chk=/home/$username/$filename/OptFreq/Output/Chk/$filename-OptFreq-conf-$conf_num2.chk \\
+# opt freq=noraman $method/$basis \\
+int=ultrafine \\
+\n$filename-OptFreq-conf-$conf_num2\n\\
+0 1
+
+
+
+" "conformer-$conf_num2"
+done
+
+
+# Rename files
+for file in conformer-*; do
+    # remove "conformer-" prefix
+    conf_num2=${file#conformer-} 
+    # rename the file
+    mv "$file" "$filename-OptFreq-conf-$conf_num2.gjf"
+done
+echo -e  "\n========================================================================"
+echo -e "\n  Gaussian OptFreq job files created."
+
+# Move files to next location
+mv $filename-OptFreq-conf-*.gjf ../../OptFreq/Input
+echo -e "  Gaussian OptFreq job files moved to ../../OptFreq/Input"
+
+
+
+##### EXIT MESSAGES #####
+
+echo -e  "\n========================================================================"
+echo ""
+echo "  Your OptFreq job files have been created."
+echo "  Method: $method"
+echo "  Basis: $basis"
+echo "  Number of Processors: $processors"
+echo ""
+echo "========================================================================"
+echo ""
+echo "  Continue:"
+echo "  cd ../../OptFreq/Input"
+echo ""
+echo "  Run OptFreq jobs:"
+echo "  $ OptFreq_run"
+echo ""

@@ -1,0 +1,61 @@
+#!/bin/bash
+
+##### ERROR CHECKING #####
+
+# Check for filename in the current directory
+if [ -f *.crest.out ]; then
+    # Extract filename from the .crest.out file
+    filename=$(basename *.crest.out .crest.out)
+else
+    echo "No .crest.out file found in current directory"
+    exit 1
+fi
+
+# Check for filename/CREST/Input in parent directories
+found_input_dir=false
+dir=$(dirname "$(pwd)")
+while [ "$dir" != "/" ]; do
+    if [ -d "$dir/$filename/CREST/Input" ]; then
+        found_input_dir=true
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+if ! $found_input_dir; then
+    echo "No matching filename/CREST/Input directory found in parent directories"
+    exit 1
+fi
+
+
+##### MOVE OUTPUT FILES #####
+
+mkdir ../Output/CREST_files
+mv coord coord.original cregen_*.tmp cre_members gfnff_topo wbo crest_best.xyz crest_rotamers.xyz struc.xyz *.crest.out ../Output/CREST_files
+mv crest_conformers.xyz ../Output/$filename-conformers.xyz
+echo -e "\n  CREST files moved to ../Output/CREST_files"
+
+mv crest.energies $filename-crest_energies.txt
+awk '{ print $1 "," $2 }' $filename-crest_energies.txt > $filename-CREST-Conformer_Energies.csv
+mv $filename-crest_energies.txt ../Output/CREST_files
+mv $filename-CREST-Conformer_Energies.csv ../../Data
+echo "  Excel spreadsheet containing ranked conformer energies created."
+echo -e "  Excel spreadsheet moved to ../../Data\n"
+
+# cp $filename.xyz ../../Data
+
+##### EXIT MESSAGE #####
+
+echo "========================================================================"
+echo ""
+echo "  Continue:"
+echo "  cd ~/$filename/CREST/Output"
+echo ''
+echo "  Create your Opt+Freq job files:"
+echo "  $ OptFreq_jobs"
+echo ""
+echo "========================================================================"
+echo ""
+
+
+

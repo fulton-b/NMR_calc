@@ -1,0 +1,84 @@
+#!/bin/bash
+
+##### DETECT FILE NAME #####
+
+# Find the first .out file that matches the pattern "variable-OptFreq-conf-*.out"
+out_file=$(find . -name "*-OptFreq-conf-*.out" | head -1)
+
+if [[ -z "$out_file" ]]; then
+  echo "No .out file found in current directory"
+  exit 1
+fi
+
+# Extract the filename from the .out file and remove the "-OptFreq-conf-*.out" pattern
+filename=$(basename "$out_file" "-OptFreq-conf-*.out" | sed 's/-OptFreq-conf-.*//')
+
+
+
+
+# Check for filename/OptFreq/Input in parent directories
+found_input_dir=false
+dir=$(dirname "$(pwd)")
+while [ "$dir" != "/" ]; do
+    if [ -d "$dir/$filename/OptFreq/Input" ]; then
+        found_input_dir=true
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+if ! $found_input_dir; then
+    echo "No matching filename/OptFreq/Input directory found in parent directories"
+    exit 1
+fi
+
+
+
+
+
+##### EXCEL SPREADSHEET CREATION #####
+
+# Count number of conformers
+conf=$(ls -dq $filename-OptFreq-conf-*.out | wc -l)
+
+# Extract conformer energies
+
+for ((i=1;i<=(conf);i++)); do
+	printf -v num "%04d" $i  # Add leading zeros to $i
+	grep 'SCF Done' $filename-OptFreq-conf-$num.out | tail -1 | awk '{print $5}' >> $filename-OptFreq-Conformer_Energies.csv
+done
+
+mv $filename-OptFreq-Conformer_Energies.csv ../../Data
+
+
+
+
+
+
+
+##### MOVE OUTPUT FILES #####
+
+mv $filename-OptFreq-conf-*.out ../Output
+
+
+##### EXIT MESSAGE #####
+
+echo -e "\n========================================================================"
+echo -e "\n  OptFreq .out files moved to ../Output"
+echo "  Excel spreadsheet containing ranked OptFreq conformer energies created."
+echo -e "  Excel spreadsheet moved to ../../Data"
+
+
+echo -e "\n========================================================================"
+echo ""
+echo "  Continue:"
+echo "  cd ~/$filename/OptFreq/Output"
+echo ''
+echo "  Create NMR job files"
+echo "  $ NMR_jobs"
+echo ""
+echo "  Create Energy job files"
+echo "  $ Energy_jobs"
+echo ""
+
+
